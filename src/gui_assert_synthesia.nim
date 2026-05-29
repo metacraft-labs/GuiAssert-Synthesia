@@ -93,6 +93,7 @@
 import std/[os, options, json, httpclient, sha1, strutils, times]
 
 import gui_assert/talking_head
+import gui_assert/emotive
 
 type
   SynthesiaError* = object of TalkingHeadError
@@ -395,6 +396,155 @@ proc pollVideoStatus*(apiKey, apiBase, videoId: string,
         "Synthesia video " & videoId & " did not reach status=complete within " &
         $maxSecs & "s (last status=" & status & ")")
     sleep(intervalMs)
+
+# ---------------------------------------------------------------------------
+# Capabilities + emotive translation + discovery + dry-run
+# ---------------------------------------------------------------------------
+
+const SynthesiaCapabilities* = ProviderCapabilities(
+  supportsEmotion: false,          ## emotion baked into avatar variant
+  supportsHeadMotion: false,
+  supportsExpressionScale: false,
+  supportsGreenScreen: true,       ## background: "green_screen"
+  supportsTransparentBg: false,
+  supportsAudioInput: false,
+  supportsTextInput: true,
+  supportsVoiceTuning: false,
+  supportsGestures: false,
+  supportsEyeContact: false,
+  supportedEmotions: @[],
+)
+
+proc emotiveToProviderSettings*(c: CommonEmotiveConfig;
+                                base: JsonNode = nil): JsonNode =
+  ## Project a `CommonEmotiveConfig` onto Synthesia's flat
+  ## providerSettings dialect.  The only field the backend really
+  ## exposes is `background`; everything else is avatar-driven and
+  ## gets recorded into the cache salt for memoisation but not sent
+  ## upstream.
+  result = if base.isNil or base.kind != JObject: newJObject() else: base
+  if c.background.isSome:
+    case c.background.get
+    of bmGreenScreen:
+      setIfMissing(result, "background", %"green_screen")
+    of bmSolidColor, bmTransparent, bmAsIs, bmTrained:
+      if c.backgroundColor.isSome:
+        setIfMissing(result, "background_color", %c.backgroundColor.get)
+
+proc applyBackgroundToBody*(body: JsonNode, c: CommonEmotiveConfig) =
+  ## Mutate a `POST /v2/videos` body so `input[0].background` is set
+  ## from the common emotive config.  Synthesia accepts:
+  ##
+  ##   * `"green_screen"` — solid green canvas the downstream chroma-
+  ##     key compose pipeline expects.
+  ##   * `"transparent"` — alpha-channel render where the account
+  ##     plan supports it.
+  ##   * Any other string — looked up as an account-scoped background
+  ##     name (e.g. `white_studio`).
+  if body.isNil or body.kind != JObject: return
+  if c.background.isNone: return
+  let input = body["input"][0]
+  case c.background.get
+  of bmGreenScreen:
+    input["background"] = %"green_screen"
+  of bmTransparent:
+    input["background"] = %"transparent"
+  of bmSolidColor, bmAsIs, bmTrained: discard
+
+proc parseGenderField(node: JsonNode): Gender =
+  if node.isNil or node.kind != JString: return gUnspecified
+  parseGender(node.getStr)
+
+proc listAvatars*(apiKey: string;
+                  apiBase: string = DefaultSynthesiaApiBase):
+    seq[AvatarInfo] =
+  ## `GET /v2/avatars` — paginated catalogue of avatars the supplied
+  ## key is allowed to use.  We pull the first page (default 100
+  ## entries) and normalise onto `AvatarInfo`.  Pagination beyond
+  ## that is an explicit non-goal here — Synthesia's avatar count is
+  ## measured in dozens for the public tier.
+  result = @[]
+  if apiKey.len == 0:
+    raise newException(SynthesiaError,
+      "listAvatars: SYNTHESIA_API_KEY is required")
+  let client = newSynthesiaHttpClient(apiKey)
+  try:
+    let resp = client.request(apiBase & "/v2/avatars?limit=100",
+                              httpMethod = HttpGet)
+    if not resp.code.is2xx:
+      raiseHttp("GET /v2/avatars", resp)
+    let parsed = parseJson(resp.body)
+    var list: JsonNode = nil
+    if parsed.kind == JObject:
+      if parsed.hasKey("avatars"): list = parsed["avatars"]
+      elif parsed.hasKey("data"): list = parsed["data"]
+    elif parsed.kind == JArray:
+      list = parsed
+    if list.isNil or list.kind != JArray: return
+    for it in list.items:
+      if it.kind != JObject: continue
+      var a = AvatarInfo()
+      a.id = it{"id"}.getStr("")
+      if a.id.len == 0:
+        a.id = it{"avatar_id"}.getStr("")
+      a.name = it{"name"}.getStr("")
+      if a.name.len == 0:
+        a.name = it{"avatar_name"}.getStr("")
+      a.gender = parseGenderField(it{"gender"})
+      a.description = it{"description"}.getStr("")
+      a.previewUrl = it{"preview"}.getStr("")
+      if a.previewUrl.len == 0:
+        a.previewUrl = it{"preview_video_url"}.getStr("")
+      if it.hasKey("tags") and it["tags"].kind == JArray:
+        for t in it["tags"].items:
+          if t.kind == JString: a.tags.add t.getStr
+      result.add a
+  finally:
+    closeQuietly(client)
+
+proc dryRunValidate*(opts: TalkingHeadOpts;
+                     prefs: AvatarPreferences = AvatarPreferences()):
+    DryRunReport =
+  ## Validate without spending render minutes.  Because Synthesia
+  ## already offers `test: true` sandbox renders that don't deduct
+  ## from quota, the dry-run focuses on local + lookup checks:
+  ## API key, script_text non-empty, avatar id resolves either via
+  ## `prefs` or `opts`, and the resolved id is present in the
+  ## account's avatar list.
+  result = newDryRunReport("synthesia")
+  let apiKey = resolveApiKey(opts)
+  if apiKey.len == 0:
+    result.addIssue(drError, "api_key",
+      "SYNTHESIA_API_KEY is not set (or providerSettings.api_key is empty)")
+    return
+  let apiBase = resolveApiBase(opts)
+  let scriptText = resolveScriptText(opts)
+  if scriptText.strip.len == 0:
+    result.addIssue(drError, "script_text",
+      "providerSettings.script_text is empty; Synthesia returns HTTP 400 " &
+      "on empty narration")
+  var avatarId = resolveAvatar(opts)
+  var available: seq[AvatarInfo] = @[]
+  try:
+    available = listAvatars(apiKey, apiBase)
+  except CatchableError as e:
+    result.addIssue(drWarning, "avatars",
+      "could not list avatars: " & e.msg)
+  if prefs.preferred.len > 0 and available.len > 0:
+    let m = matchPreferredAvatar(prefs, "synthesia", available)
+    if m.isSome:
+      avatarId = m.get.id
+    else:
+      result.addIssue(drWarning, "avatar_preferences",
+        "no preferred avatar matched; using opts default '" & avatarId & "'")
+  if available.len > 0:
+    var hit = false
+    for a in available:
+      if a.id == avatarId or a.name == avatarId:
+        hit = true; break
+    if not hit:
+      result.addIssue(drError, "avatar",
+        "avatar '" & avatarId & "' is not in the account's avatar list")
 
 proc downloadVideo*(videoUrl, outputPath: string) =
   ## Download the rendered MP4. The Synthesia `download` URL is served
