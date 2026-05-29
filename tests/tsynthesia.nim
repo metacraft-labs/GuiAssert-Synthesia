@@ -45,6 +45,12 @@ import std/[asynchttpserver, asyncdispatch, httpcore, json,
 import gui_assert/talking_head
 import gui_assert_synthesia
 
+# Capture the live API key at module load — pure tests below call
+# `delEnv(ApiKeyEnvVar)` to assert "missing key" behaviour. Nim's
+# `unittest` runs test bodies eagerly as the module loads, so we must
+# read the env *before* the pure suites execute.
+let PreservedSynthesiaApiKey* {.used.} = getEnv(ApiKeyEnvVar)
+
 # ---------------------------------------------------------------------------
 # Path helpers
 # ---------------------------------------------------------------------------
@@ -720,12 +726,13 @@ when defined(synthesiaLive):
   suite "synthesia live render against api.synthesia.io":
 
     test "renders a real talking-head MP4 via the Synthesia API":
-      doAssert getEnv(ApiKeyEnvVar).len > 0,
+      doAssert PreservedSynthesiaApiKey.len > 0,
         "SYNTHESIA_API_KEY is not set. Live Synthesia tests require a " &
         "real API key from https://app.synthesia.io (Creator+ plan; " &
         "API access typically gated to Creator/Enterprise tiers — " &
         "Starter $29/mo, Creator $89/mo, Enterprise custom). Export " &
         "SYNTHESIA_API_KEY=<your key> and re-run with -d:synthesiaLive."
+      putEnv(ApiKeyEnvVar, PreservedSynthesiaApiKey)
 
       let narration = ensureLiveNarration()
 
@@ -741,7 +748,8 @@ when defined(synthesiaLive):
         device: "auto",
         cacheDir: some(tmp / "cache"),
         providerSettings: %*{
-          "script_text": "Hello GuiAssert Synthesia",
+          "api_key": PreservedSynthesiaApiKey,
+          "script_text": "Hello GuiAssert Synthesia. This is a real Synthesia avatar render.",
           "avatar": DefaultSynthesiaAvatar,
           "background": DefaultSynthesiaBackground,
           "title": "GuiAssert live test",
