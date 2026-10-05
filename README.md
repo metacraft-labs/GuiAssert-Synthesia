@@ -31,13 +31,13 @@ GuiAssert-Synthesia/
 
 ## Cost of setup
 
-| Resource     | Approx.                                                |
-| ------------ | ------------------------------------------------------ |
-| Disk         | None beyond Nim build artefacts                        |
-| Network      | Per-render JSON + MP4 download, modest                 |
-| Time         | First call ~minutes (Synthesia renders are slow)       |
-| Dollars      | **Starter $29/mo, Creator $89/mo, Enterprise custom**. API access typically requires the **Creator+ plan**; the Starter tier is web-UI-only. Within a plan, renders are quota-metered (minutes/month) rather than pay-as-you-go per call. |
-| API key      | Yes — `SYNTHESIA_API_KEY` env var                      |
+| Resource | Approx.                                                                                                                                                                                                                                   |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Disk     | None beyond Nim build artefacts                                                                                                                                                                                                           |
+| Network  | Per-render JSON + MP4 download, modest                                                                                                                                                                                                    |
+| Time     | First call ~minutes (Synthesia renders are slow)                                                                                                                                                                                          |
+| Dollars  | **Starter $29/mo, Creator $89/mo, Enterprise custom**. API access typically requires the **Creator+ plan**; the Starter tier is web-UI-only. Within a plan, renders are quota-metered (minutes/month) rather than pay-as-you-go per call. |
+| API key  | Yes — `SYNTHESIA_API_KEY` env var                                                                                                                                                                                                         |
 
 Pricing is set by Synthesia; see [their pricing page](https://www.synthesia.io/pricing)
 for current numbers and the per-tier monthly render quota. The
@@ -61,7 +61,7 @@ user setup.
 
 GuiAssert's `TalkingHeadProvider.generate` contract is
 `generate(narrationWav, outputMp4, opts)` — i.e. the audio is provided
-as a *pre-rendered WAV*. Synthesia's `POST /v2/videos` endpoint does
+as a _pre-rendered WAV_. Synthesia's `POST /v2/videos` endpoint does
 NOT accept uploaded audio: it takes a `scriptText` string and
 synthesises the voiceover itself (Synthesia ships its own
 avatar-aware TTS). This plugin therefore:
@@ -127,15 +127,15 @@ generateTalkingHead(reg, "synthesia", narrationWav, outputMp4, opts)
 All knobs live under `TalkingHeadOpts.providerSettings` (a `JsonNode`),
 with environment-variable fallbacks where applicable:
 
-| Setting | YAML key | Env fallback | Default | Purpose |
-| --- | --- | --- | --- | --- |
-| `api_key` | `api_key` | `SYNTHESIA_API_KEY` | _(none)_ | Synthesia API key (raw, no prefix). |
-| `api_base` | `api_base` | _(none)_ | `https://api.synthesia.io` | API endpoint. Override to point at a mock or staging server. |
-| `script_text` | `script_text` | _(none)_ | _(none)_ | **REQUIRED.** Script for Synthesia to speak. |
-| `avatar` | `avatar` | _(none)_ | `anna_costume1_cameraA` | Synthesia avatar identifier (public stock or custom). |
-| `background` | `background` | _(none)_ | `white_studio` | Synthesia background identifier. |
-| `title` | `title` | _(none)_ | `GuiAssert Synthesia render` | Display title for the rendered video. |
-| `test` | `test` | _(none)_ | `true` | Sandbox render (watermarked, no quota use). Set `false` to spend real quota. |
+| Setting       | YAML key      | Env fallback        | Default                      | Purpose                                                                      |
+| ------------- | ------------- | ------------------- | ---------------------------- | ---------------------------------------------------------------------------- |
+| `api_key`     | `api_key`     | `SYNTHESIA_API_KEY` | _(none)_                     | Synthesia API key (raw, no prefix).                                          |
+| `api_base`    | `api_base`    | _(none)_            | `https://api.synthesia.io`   | API endpoint. Override to point at a mock or staging server.                 |
+| `script_text` | `script_text` | _(none)_            | _(none)_                     | **REQUIRED.** Script for Synthesia to speak.                                 |
+| `avatar`      | `avatar`      | _(none)_            | `anna_costume1_cameraA`      | Synthesia avatar identifier (public stock or custom).                        |
+| `background`  | `background`  | _(none)_            | `white_studio`               | Synthesia background identifier.                                             |
+| `title`       | `title`       | _(none)_            | `GuiAssert Synthesia render` | Display title for the rendered video.                                        |
+| `test`        | `test`        | _(none)_            | `true`                       | Sandbox render (watermarked, no quota use). Set `false` to spend real quota. |
 
 The provider name is `"synthesia"`.
 
@@ -149,11 +149,13 @@ poll round-trips):
    ```json
    {
      "test": true,
-     "input": [{
-       "scriptText": "Hello, this is Synthesia.",
-       "avatar": "anna_costume1_cameraA",
-       "background": "white_studio"
-     }],
+     "input": [
+       {
+         "scriptText": "Hello, this is Synthesia.",
+         "avatar": "anna_costume1_cameraA",
+         "background": "white_studio"
+       }
+     ],
      "title": "Demo render"
    }
    ```
@@ -168,8 +170,8 @@ poll round-trips):
    not require the `Authorization` header.
 
 Authentication uses the Synthesia-specific raw-key
-`Authorization: <SYNTHESIA_API_KEY>` header. (Notably *not*
-`Bearer <token>`, *not* HTTP Basic, and *not* `X-Api-Key`.)
+`Authorization: <SYNTHESIA_API_KEY>` header. (Notably _not_
+`Bearer <token>`, _not_ HTTP Basic, and _not_ `X-Api-Key`.)
 
 ## Caching
 
@@ -225,3 +227,26 @@ to spend real Synthesia quota simply compiles without
 MIT — see `LICENSE`. Synthesia itself is a commercial service governed
 by its own [terms of service](https://www.synthesia.io/legal-and-policies/terms-of-service);
 the plugin only speaks the public REST API.
+
+## Native contributor hooks
+
+The plugin remains a pure Nim HTTP client. Its developer shell also supplies
+native Python, UV, Prek and the portable formatters from its existing pin.
+The committed hook config runs the seven standard checks and actual public lint.
+
+Select the verified matching managed-hook engine as `REPROBUILD_REPRO`.
+From this repository root, bootstrap its genuine managed layout first:
+
+```sh
+direnv exec . nix develop --no-update-lock-file --no-write-lock-file --command "$REPROBUILD_REPRO" hooks ensure --vcs .
+direnv exec . nix develop --no-update-lock-file --no-write-lock-file --command python3 tools/install-canonical-hooks.py --repro "$REPROBUILD_REPRO"
+direnv exec . nix develop --no-update-lock-file --no-write-lock-file --command prek run --all-files
+```
+
+The installer verifies the complete matching engine and dispatcher bytes,
+preserves known local hooks and pre-push bodies/modes, and refuses unknown or
+external hook ownership. Its installed native Prek body persistently selects
+canonical upstream hook implementations even when the caller selector is absent.
+System Python selection uses the owning native interpreter without managed
+Python downloads. Linux qualification does not establish native Windows tools.
+Original test and required live API prerequisites remain unchanged.
