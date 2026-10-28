@@ -1,5 +1,7 @@
 # GuiAssert-Synthesia
 
+Implements the talking-head provider contract of [DemoVideoStudio](https://github.com/metacraft-labs/DemoVideoStudio), version 1 (`demo_video_studio/plugins/talking_head`), and runs its conformance kit in `just test` (`tests/tcontract.nim`). Build it next to DemoVideoStudio and GuiAssert checkouts (or set `DEMO_VIDEO_STUDIO_SRC` and `GUI_ASSERT_SRC`).
+
 Synthesia talking-head plugin for [GuiAssert]. Implements GuiAssert's
 `TalkingHeadProvider` contract by speaking the commercial
 [Synthesia v2 REST API](https://docs.synthesia.io/reference/create-video)
@@ -31,13 +33,13 @@ GuiAssert-Synthesia/
 
 ## Cost of setup
 
-| Resource     | Approx.                                                |
-| ------------ | ------------------------------------------------------ |
-| Disk         | None beyond Nim build artefacts                        |
-| Network      | Per-render JSON + MP4 download, modest                 |
-| Time         | First call ~minutes (Synthesia renders are slow)       |
-| Dollars      | **Starter $29/mo, Creator $89/mo, Enterprise custom**. API access typically requires the **Creator+ plan**; the Starter tier is web-UI-only. Within a plan, renders are quota-metered (minutes/month) rather than pay-as-you-go per call. |
-| API key      | Yes — `SYNTHESIA_API_KEY` env var                      |
+| Resource | Approx.                                                                                                                                                                                                                                   |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Disk     | None beyond Nim build artefacts                                                                                                                                                                                                           |
+| Network  | Per-render JSON + MP4 download, modest                                                                                                                                                                                                    |
+| Time     | First call ~minutes (Synthesia renders are slow)                                                                                                                                                                                          |
+| Dollars  | **Starter $29/mo, Creator $89/mo, Enterprise custom**. API access typically requires the **Creator+ plan**; the Starter tier is web-UI-only. Within a plan, renders are quota-metered (minutes/month) rather than pay-as-you-go per call. |
+| API key  | Yes — `SYNTHESIA_API_KEY` env var                                                                                                                                                                                                         |
 
 Pricing is set by Synthesia; see [their pricing page](https://www.synthesia.io/pricing)
 for current numbers and the per-tier monthly render quota. The
@@ -61,7 +63,7 @@ user setup.
 
 GuiAssert's `TalkingHeadProvider.generate` contract is
 `generate(narrationWav, outputMp4, opts)` — i.e. the audio is provided
-as a *pre-rendered WAV*. Synthesia's `POST /v2/videos` endpoint does
+as a _pre-rendered WAV_. Synthesia's `POST /v2/videos` endpoint does
 NOT accept uploaded audio: it takes a `scriptText` string and
 synthesises the voiceover itself (Synthesia ships its own
 avatar-aware TTS). This plugin therefore:
@@ -100,7 +102,7 @@ Bearer prefix.
 ## Wiring into a runner
 
 ```nim
-import gui_assert/talking_head
+import demo_video_studio/plugins/talking_head
 import gui_assert_synthesia
 
 let reg = newRegistry()         # registry pre-populated with `stock_avatar`
@@ -127,15 +129,15 @@ generateTalkingHead(reg, "synthesia", narrationWav, outputMp4, opts)
 All knobs live under `TalkingHeadOpts.providerSettings` (a `JsonNode`),
 with environment-variable fallbacks where applicable:
 
-| Setting | YAML key | Env fallback | Default | Purpose |
-| --- | --- | --- | --- | --- |
-| `api_key` | `api_key` | `SYNTHESIA_API_KEY` | _(none)_ | Synthesia API key (raw, no prefix). |
-| `api_base` | `api_base` | _(none)_ | `https://api.synthesia.io` | API endpoint. Override to point at a mock or staging server. |
-| `script_text` | `script_text` | _(none)_ | _(none)_ | **REQUIRED.** Script for Synthesia to speak. |
-| `avatar` | `avatar` | _(none)_ | `anna_costume1_cameraA` | Synthesia avatar identifier (public stock or custom). |
-| `background` | `background` | _(none)_ | `white_studio` | Synthesia background identifier. |
-| `title` | `title` | _(none)_ | `GuiAssert Synthesia render` | Display title for the rendered video. |
-| `test` | `test` | _(none)_ | `true` | Sandbox render (watermarked, no quota use). Set `false` to spend real quota. |
+| Setting       | YAML key      | Env fallback        | Default                      | Purpose                                                                      |
+| ------------- | ------------- | ------------------- | ---------------------------- | ---------------------------------------------------------------------------- |
+| `api_key`     | `api_key`     | `SYNTHESIA_API_KEY` | _(none)_                     | Synthesia API key (raw, no prefix).                                          |
+| `api_base`    | `api_base`    | _(none)_            | `https://api.synthesia.io`   | API endpoint. Override to point at a mock or staging server.                 |
+| `script_text` | `script_text` | _(none)_            | _(none)_                     | **REQUIRED.** Script for Synthesia to speak.                                 |
+| `avatar`      | `avatar`      | _(none)_            | `anna_costume1_cameraA`      | Synthesia avatar identifier (public stock or custom).                        |
+| `background`  | `background`  | _(none)_            | `white_studio`               | Synthesia background identifier.                                             |
+| `title`       | `title`       | _(none)_            | `GuiAssert Synthesia render` | Display title for the rendered video.                                        |
+| `test`        | `test`        | _(none)_            | `true`                       | Sandbox render (watermarked, no quota use). Set `false` to spend real quota. |
 
 The provider name is `"synthesia"`.
 
@@ -149,11 +151,13 @@ poll round-trips):
    ```json
    {
      "test": true,
-     "input": [{
-       "scriptText": "Hello, this is Synthesia.",
-       "avatar": "anna_costume1_cameraA",
-       "background": "white_studio"
-     }],
+     "input": [
+       {
+         "scriptText": "Hello, this is Synthesia.",
+         "avatar": "anna_costume1_cameraA",
+         "background": "white_studio"
+       }
+     ],
      "title": "Demo render"
    }
    ```
@@ -168,8 +172,8 @@ poll round-trips):
    not require the `Authorization` header.
 
 Authentication uses the Synthesia-specific raw-key
-`Authorization: <SYNTHESIA_API_KEY>` header. (Notably *not*
-`Bearer <token>`, *not* HTTP Basic, and *not* `X-Api-Key`.)
+`Authorization: <SYNTHESIA_API_KEY>` header. (Notably _not_
+`Bearer <token>`, _not_ HTTP Basic, and _not_ `X-Api-Key`.)
 
 ## Caching
 
@@ -190,10 +194,10 @@ The mock-server test validates the cache-hit path: a second
 
 ```sh
 # Pure unit tests + mock-server integration test — no network.
-nim c -r --threads:on --hints:off --path:src --path:../GuiAssert/src tests/tsynthesia.nim
+nim c -r --threads:on --hints:off --path:src --path:../DemoVideoStudio/src --path:../GuiAssert/src tests/tsynthesia.nim
 
 # Live end-to-end against api.synthesia.io — requires SYNTHESIA_API_KEY.
-nim c -d:synthesiaLive -r --threads:on --hints:off --path:src --path:../GuiAssert/src tests/tsynthesia.nim
+nim c -d:synthesiaLive -r --threads:on --hints:off --path:src --path:../DemoVideoStudio/src --path:../GuiAssert/src tests/tsynthesia.nim
 ```
 
 The `--threads:on` flag is required because the mock-server test

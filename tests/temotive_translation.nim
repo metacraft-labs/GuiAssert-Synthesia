@@ -1,7 +1,7 @@
 ## Pure tests for Synthesia emotive translation + body mutation.
 
 import std/[json, options, unittest]
-import gui_assert/talking_head, gui_assert/emotive
+import demo_video_studio/plugins/talking_head, demo_video_studio/emotive
 import gui_assert_synthesia
 
 suite "Synthesia emotiveToProviderSettings":
