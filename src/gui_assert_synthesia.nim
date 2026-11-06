@@ -92,14 +92,14 @@
 
 import std/[os, options, json, httpclient, sha1, strutils, times]
 
-import gui_assert/talking_head
-import gui_assert/emotive
+import demo_video_studio/plugins/talking_head
+import demo_video_studio/emotive
 
 type
   SynthesiaError* = object of TalkingHeadError
     ## Raised by the low-level HTTP entry points. Subclasses
     ## `TalkingHeadError` so the generic dispatch in
-    ## `gui_assert/talking_head` can catch it uniformly.
+    ## `demo_video_studio/plugins/talking_head` can catch it uniformly.
 
 const
   ProviderName* = "synthesia"
@@ -686,7 +686,7 @@ proc registerSynthesia*(r: TalkingHeadRegistry) =
   ## One-liner plugin entry point. Callers do:
   ##
   ## ```nim
-  ## import gui_assert/talking_head
+  ## import demo_video_studio/plugins/talking_head
   ## import gui_assert_synthesia
   ##
   ## let reg = newRegistry()
