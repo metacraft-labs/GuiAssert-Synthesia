@@ -2,7 +2,7 @@
 #
 # `just test`              - run the pure + mock-server tests (no network).
 # `just test-live`         - run the gated live test (-d:synthesiaLive). Requires SYNTHESIA_API_KEY.
-# `just lint`              - placeholder; required by the workspace pre-commit hook.
+# `just lint`              - check the public plugin module against the sibling GuiAssert API.
 
 # Sibling sources: DemoVideoStudio (the plugin contract) and GuiAssert (what
 # the studio itself builds on), next to this checkout unless overridden.
@@ -29,7 +29,6 @@ test:
 test-live:
     nim c -d:synthesiaLive -r --threads:on --hints:off --path:src --path:{{studio_src}} --path:{{gui_assert_src}} tests/tsynthesia.nim
 
-# Required by the workspace's pre-commit hook (`just lint`). Add real
-# linters here as they come online (e.g. `nim check`).
+# Check the actual public module with the same threaded sibling API contract.
 lint:
-    @echo "[lint] no linters configured yet for GuiAssert-Synthesia."
+    nim check --threads:on --hints:off --path:src --path:../GuiAssert/src src/gui_assert_synthesia.nim
